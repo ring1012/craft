@@ -78,7 +78,7 @@ public class InitializationService {
     // 执行命令的方法
     private void executeCommand(String command) throws IOException, InterruptedException {
         System.out.println("Executing command: " + command);
-//        Process process = Runtime.getRuntime().exec(command);
+        Process process = Runtime.getRuntime().exec(command);
 //        process.waitFor();
     }
 }
