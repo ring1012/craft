@@ -42,28 +42,28 @@ public class WebSocketProxyConfig {
     @Bean
     public WebSocketHandler webSocketHandler(WebSocketClient webSocketClient) {
         return session -> {
-            // 目标 WebSocket 服务器的地址（V2Ray代理）
             URI targetUri = URI.create("ws://127.0.0.1:2048/whatever");
 
             HttpHeaders headers = new HttpHeaders();
             headers.setAll(session.getHandshakeInfo().getHeaders().toSingleValueMap());
-            headers.set("Upgrade", "websocket");
-            headers.set("Connection", "Upgrade");
-            headers.set("Host", "127.0.0.1:2048");
 
             return webSocketClient.execute(targetUri, headers, targetSession -> {
                 // 客户端 -> 目标 WebSocket 服务器
-                Flux<WebSocketMessage> clientMessages = session.receive();
+                Flux<WebSocketMessage> clientMessages = session.receive()
+                        .doOnNext(message -> message.retain()); // 增加引用计数
 
                 // 目标服务器 -> 客户端
-                Flux<WebSocketMessage> targetMessages = targetSession.receive();
+                Flux<WebSocketMessage> targetMessages = targetSession.receive()
+                        .doOnNext(message -> message.retain()); // 增加引用计数
 
-                // 直接 `transform()` 以避免 `send()` 过载
-                Mono<Void> sendToTarget = targetSession.send(clientMessages);
-                Mono<Void> sendToClient = session.send(targetMessages);
+                // 直接 `send()`，避免 `flatMap()`
+                Mono<Void> sendToTarget = targetSession.send(clientMessages); // 释放引用计数
+
+                Mono<Void> sendToClient = session.send(targetMessages); // 释放引用计数
 
                 return Mono.when(sendToTarget, sendToClient)
                         .doOnCancel(() -> {
+                            System.out.println("Connection cancelled");
                             closeSafely(session);
                             closeSafely(targetSession);
                         })
@@ -72,6 +72,7 @@ public class WebSocketProxyConfig {
                             closeSafely(targetSession);
                         })
                         .onErrorResume(e -> {
+                            System.err.println("WebSocket error: " + e.getMessage());
                             closeSafely(session);
                             closeSafely(targetSession);
                             return Mono.empty();
