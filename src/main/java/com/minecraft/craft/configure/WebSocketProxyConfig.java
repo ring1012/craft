@@ -14,6 +14,7 @@ import org.springframework.web.reactive.socket.server.support.HandshakeWebSocket
 import org.springframework.web.reactive.socket.server.support.WebSocketHandlerAdapter;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.net.URI;
 import java.util.HashMap;
@@ -50,23 +51,38 @@ public class WebSocketProxyConfig {
             return webSocketClient.execute(targetUri, headers, targetSession -> {
                 // 客户端 -> 目标 WebSocket 服务器
                 Flux<WebSocketMessage> clientMessages = session.receive()
-                        .doOnNext(message -> message.retain()); // 增加引用计数
+                        .doOnNext(message -> {
+                            if (!session.isOpen()) {
+                                message.release(); // 避免泄漏
+                                return;
+                            }
+                            message.retain(); // 增加引用计数
+                        });
 
                 // 目标服务器 -> 客户端
                 Flux<WebSocketMessage> targetMessages = targetSession.receive()
-                        .doOnNext(message -> message.retain()); // 增加引用计数
+                        .doOnNext(message -> {
+                            if (!targetSession.isOpen()) {
+                                message.release(); // 避免泄漏
+                                return;
+                            }
+                            message.retain(); // 增加引用计数
+                        });
 
-                // 直接 `send()`，避免 `flatMap()`
-                Mono<Void> sendToTarget = targetSession.send(clientMessages); // 释放引用计数
+                // 发送数据流
+                Mono<Void> sendToTarget = targetSession.send(clientMessages)
+                        .onErrorResume(e -> {
+                            System.err.println("Error sending to target: " + e.getMessage());
+                            return Mono.empty();
+                        });
 
-                Mono<Void> sendToClient = session.send(targetMessages); // 释放引用计数
+                Mono<Void> sendToClient = session.send(targetMessages)
+                        .onErrorResume(e -> {
+                            System.err.println("Error sending to client: " + e.getMessage());
+                            return Mono.empty();
+                        });
 
                 return Mono.when(sendToTarget, sendToClient)
-                        .doOnCancel(() -> {
-                            System.out.println("Connection cancelled");
-                            closeSafely(session);
-                            closeSafely(targetSession);
-                        })
                         .doOnTerminate(() -> {
                             closeSafely(session);
                             closeSafely(targetSession);
@@ -83,10 +99,21 @@ public class WebSocketProxyConfig {
 
     // 安全关闭 WebSocket 连接
     private void closeSafely(WebSocketSession session) {
-        if (session != null && session.isOpen()) {
-            session.close().subscribe();
+        if (session == null || !session.isOpen()) {
+            return; // 避免重复关闭
+        }
+
+        try {
+            session.close()
+                    .subscribe(
+                            null,
+                            error -> System.err.println("Error closing WebSocketSession: " + error.getMessage())
+                    );
+        } catch (Exception e) {
+            System.err.println("Exception while closing WebSocketSession: " + e.getMessage());
         }
     }
+
 
     @Bean
     public WebSocketClient webSocketClient() {
