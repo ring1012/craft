@@ -36,7 +36,7 @@ public class ScriptExecutor {
             }
 
             // 执行 shell 脚本
-            ProcessBuilder processBuilder = new ProcessBuilder("/bin/bash", scriptPath);
+            ProcessBuilder processBuilder = new ProcessBuilder("/bin/sh", scriptPath);
             processBuilder.redirectErrorStream(true); // 合并 stderr 到 stdout
             Process process = processBuilder.start();
 

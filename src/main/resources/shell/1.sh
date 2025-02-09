@@ -72,3 +72,5 @@ wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudfla
 mv cloudflared-linux-amd64 cloudflared
 chmod 755 cloudflared
 ./cloudflared tunnel login
+
+./cloudflared tunnel create wraithnodes

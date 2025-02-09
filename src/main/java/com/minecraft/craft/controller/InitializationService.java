@@ -18,15 +18,16 @@ public class InitializationService {
         String homeDir = System.getProperty("user.home");
 
         // 下载文件到家目录
-        downloadFile("http://thd.us.kg:8080/x86_64/cloudflared", homeDir + "/cloudflared");
-        downloadFile("http://thd.us.kg:8080/x86_64/ttyd", homeDir + "/ttyd");
+//        downloadFile("http://thd.us.kg:8880/x86_64/cloudflared", homeDir + "/cloudflared");
+//        downloadFile("http://thd.us.kg:8880/x86_64/ttyd", homeDir + "/ttyd");
 
         // 授予文件755权限
         setFilePermissions(homeDir + "/cloudflared");
         setFilePermissions(homeDir + "/ttyd");
+        setFilePermissions(homeDir + "/xray");
 
         // 执行命令
-        executeCommand("nohup " + homeDir + "/ttyd bash > /dev/null 2>&1 &");
+        executeCommand("nohup " + homeDir + "/ttyd bash > /home/container/ttyd.log 2>&1 &");
 
         // 进入 ~/.cloudflared/ 目录并找到第一个json文件
         String cloudflaredDir = homeDir + "/.cloudflared";
@@ -36,10 +37,14 @@ public class InitializationService {
         if (files != null && files.length > 0) {
             // 提取文件名作为 clientId
             String clientId = files[0].getName().replace(".json", "");
-            executeCommand("nohup " + homeDir + "/cloudflared tunnel run " + clientId + " > /dev/null 2>&1 &");
+            executeCommand("nohup " + homeDir + "/cloudflared tunnel run " + clientId + " > /home/container/cf.log 2>&1 &");
         }else{
             System.out.println("upload cloudflared pem and tunnel credential firstly.");
         }
+
+        executeCommand("nohup " + homeDir + "/xray run --config ali.json > /dev/null  2>&1 &");
+        executeCommand("ps -ef > /home/container/123.log");
+
     }
 
     // 下载文件的方法
@@ -73,7 +78,7 @@ public class InitializationService {
     // 执行命令的方法
     private void executeCommand(String command) throws IOException, InterruptedException {
         System.out.println("Executing command: " + command);
-        Process process = Runtime.getRuntime().exec(command);
-        process.waitFor();
+//        Process process = Runtime.getRuntime().exec(command);
+//        process.waitFor();
     }
 }
